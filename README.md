@@ -2,6 +2,9 @@
 
 STM32 memory and bootloader process explained.
 
+
+Even though all examples below are for STM32F4, basic principles apply to pretty much all MCUs.
+
 ## Prerequisite
 
 ### Build
@@ -59,6 +62,10 @@ Opening and parsing file: stm32-memory.elf
 
 It's actually a FLASH memory starting address that will be explained below.
 
+### Debug 
+
+TODO
+
 ## Linker File
 
 The linker takes the object files produced by the compiler and makes a final compilation output, .elf binary in our case.
@@ -66,14 +73,49 @@ The linker is always using a linker script file. Even if you don't specify any, 
 
 STM32CubeMX produces [STM32F446RETx_FLASH.ld](./src/STM32F446RETx_FLASH.ld) which we'll be looking at as a reference for all out explorations below.
 
+Important to note, that the linker script only describes the memory based on the MCU specifications and doesn't alter any memory adresses.
+
 ## Memory
 
-There're two basic memory peripherals present in SMT32F4:
+Program memory, data memory, registers and I/O ports in STM32F4 are organized within the same linear address space.
 
-* **RAM** stores data produced by the running programm. Using heap or stack abstractions for memory management.
-* **FLASH** keeps the program binary and constants, used by bootloader to initialize RAM on startup.
+```c
+         ...
+----- 0x2001FFFF -----
+|                    |
+|   RAM              |
+|                    |
+----- 0x20000000 -----
+         ...          
+----- 0x1FFF7A0F -----
+|                    |
+|   System           |
+|                    |
+----- 0x1FFF0000 -----
+         ...
+----- 0x081FFFFF -----
+|                    |
+|   Flash            |
+|                    |
+----- 0x08000000 -----
+         ...
+----- 0x001FFFFF -----
+|                    |
+|   Alias            |
+|                    |
+----- 0x00000000 -----
+```
 
-In the address space, FLASH starts at `ORIGIN = 0x8000000` and RAM at `ORIGIN = 0x20000000`.
+Where Alias memory is pointing to Flash, System or RAM memory depending on the `BOOT0` pin. By default it's FLASH.
+
+Two spaces are of the most interest for us for now:
+
+* **RAM** stores data produced by the running programm. Using heap or stack abstractions for memory management. The data isn't persisted.
+* **FLASH** keeps the program binary and constants, used by bootloader to initialize RAM on startup. The data is persisted.
+
+Though the functional division could be any in practice. You may want to load a program binary data into RAM instead and vice versa.
+
+Memory structure is reflected in the linker file. FLASH starts at `ORIGIN = 0x8000000` and RAM at `ORIGIN = 0x20000000`.
 
 ```c
 // linker file
@@ -84,9 +126,8 @@ MEMORY
 }
 ```
 
-Note that it's just a default implementation, you could easily relocate memory, split FLASH and RAM and add your blocks or sections.
+Note that it's just a default implementation, you could easily split FLASH and RAM and add your blocks or sections.
 
-Even though all examples below are for STM32F4, basic principles apply to pretty much all MCUs.
 
 ## Sections
 
@@ -106,12 +147,12 @@ SECTIONS
 ```
 
 
-To explore .elf symbol table we'll be using `arm-none-eabi-objdump` and sort all entries by their address:
+To explore .elf symbol table we'll be using `arm-none-eabi-objdump` command and sort all entries by their addresses:
 ```sh
 arm-none-eabi-objdump -t stm32-memory.elf | sort
 ```
 
-The program produces output as described [here](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
+The program produces output as described in details [here](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
 ```c
 Address Flag_Bits Section Size Name
 ```
@@ -215,7 +256,7 @@ Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Si
 
 ## Boot Process
 
-Linker file specifies the first instuction to run in the programm:
+Linker file specifies the first instuction to run in the program:
 ```c
 // linker file
 ENTRY(Reset_Handler)
@@ -236,9 +277,44 @@ Looking at our symbol table, `Reset_Handler` is present in the FLASH `.text` sec
 
 TODO explain address diff?
 
-### NVIC
+Actually this information is used mostly by the linker to check if the entry point symbol really exist somewhere in the code. It has no practical meaning for the MCU.
 
-TODO
+### Alias Memory
+
+Based on the STM32 specification, the CPU fetches the top-of-stack value from address `0x00000000`, then starts code execution from the boot memory starting from `0x00000004`.
+
+```c
+----- 0x001FFFFF -----
+|                    |
+|   Alias            |
+|                    |
+----- 0x00000000 -----
+```
+
+It's exactly where Alias memory mentioned above is defined. With the default configuration, when `BOOT0 = 0`, it's aliasing to the FLASH memory block starting from `0x8000000`.
+
+Other options based on the `BOOT0` and `BOOT1` include System memory with an embedded bootloader or RAM memory.
+The embedded bootloader is programmed by ST during production and out of scope for now.
+
+But `Reset_Handler` has an address `0x08000524` which is not exactly the beginning of the FLASH memory, how does the MCU find the bootstrap method then?
+
+### Vector Table
+
+Here's where Vector Table comes into play.
+```c
+08000000 l    d  .isr_vector	00000000 .isr_vector
+```
+
+Rows in the table are addresses of the MCU hard-defined functions for various events and interrupts. Actual table must be filled by a bootloader.
+
+| Address    | Name                   |
+|------------|------------------------|
+| 0x00000000 | Reserved               |
+| 0x00000004 | **Reset Handler**      |
+| 0x00000008 | Non Maskable Interrupt |
+| 0x00000012 | Hard Fault             |
+| ...        | Other Interrupts       |
+
 
 ### Bootloader 
 
