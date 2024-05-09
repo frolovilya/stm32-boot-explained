@@ -2,7 +2,9 @@
 
 STM32 memory and bootloader process explained.
 
-## Build
+## Prerequisite
+
+### Build
 Install [ARM GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads), on Mac could be done with _brew_:
 ```sh
 brew install --cask gcc-arm-embedded
@@ -22,7 +24,7 @@ cmake ../ -DPROGRAMMER_CLI=/Applications/STMicroelectronics/STM32CubeProgrammer/
 make VERBOSE=1
 ```
 
-Not that the last command is a linking stage. If we strip all other compiler flags, the command could look like below. Basically we istruct the linker to link all .obj files into .elf binary by using provided linker script.
+Note that the last command is a linking stage. If we strip all other compiler flags, the command could look like below. Basically we istruct the linker to link all .obj files into .elf binary by using provided linker script.
 
 ```sh
 arm-none-eabi-gcc  
@@ -36,32 +38,33 @@ arm-none-eabi-gcc
     -o stm32-memory.elf
 ```
 
+### Upload
+
+STM32CuberProgrammer is preconfigured for SWD procotol, just run:
+```sh
+make flash
+```
+
+Take a note on the programmer output. It's using `0x08000000` address as a starting point:
+
+```sh
+...
+Memory Programming ...
+Opening and parsing file: stm32-memory.elf
+  File          : stm32-memory.elf
+  Size          : 1,46 KB
+  Address       : 0x08000000
+...
+```
+
+It's actually a FLASH memory starting address that will be explained below.
+
 ## Linker File
 
 The linker takes the object files produced by the compiler and makes a final compilation output, .elf binary in our case.
 The linker is always using a linker script file. Even if you don't specify any, a default one is used. 
 
 STM32CubeMX produces [STM32F446RETx_FLASH.ld](./src/STM32F446RETx_FLASH.ld) which we'll be looking at as a reference for all out explorations below.
-
-```c
-/* Entry Point */
-ENTRY(Reset_Handler)
-
-...
-
-/* Specify the memory areas */
-MEMORY
-{
-  RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 128K
-  FLASH (rx) : ORIGIN = 0x8000000, LENGTH = 512K
-}
-
-/* Define output sections */
-SECTIONS
-{
-    ...
-}
-```
 
 ## Memory
 
@@ -72,20 +75,46 @@ There're two basic memory peripherals present in SMT32F4:
 
 In the address space, FLASH starts at `ORIGIN = 0x8000000` and RAM at `ORIGIN = 0x20000000`.
 
+```c
+// linker file
+MEMORY
+{
+  RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 128K
+  FLASH (rx) : ORIGIN = 0x8000000, LENGTH = 512K
+}
+```
+
+Note that it's just a default implementation, you could easily relocate memory, split FLASH and RAM and add your blocks or sections.
+
 Even though all examples below are for STM32F4, basic principles apply to pretty much all MCUs.
 
 ## Sections
 
-To explore .elf symbol table we'll be using the following command:
+Memory is then split in the linker file to sections, each having it's address and destination (FLASH or RAM).
+
+```c
+// linker file
+SECTIONS
+{
+  ...
+  .text :
+  {
+    ...
+  } >FLASH
+  ...
+}
+```
+
+
+To explore .elf symbol table we'll be using `arm-none-eabi-objdump` and sort all entries by their address:
 ```sh
 arm-none-eabi-objdump -t stm32-memory.elf | sort
 ```
 
-The program produces output in the following [format](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
+The program produces output as described [here](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
 ```c
 Address Flag_Bits Section Size Name
 ```
-
 
 ### .text 
 Compiled programm code goes into this section in **FLASH** memory.
@@ -116,7 +145,7 @@ The section resides in **RAM** memory and keeps all _defined_ variables values. 
 20000010 g       .data	00000000 _edata
 ```
 
-Our defined variables from `main.c` are residing in this section:
+Our defined variables from [main.c](./src/main.c) are residing in this section:
 ```c
 20000000 l     O .data	00000004 static_defined_int
 20000008 g     O .data	00000008 defined_double
@@ -137,7 +166,7 @@ Memory range spans from `_sbss` to `_ebss`.
 20000044 g       .bss	00000000 _ebss
 ```
 
-Our declared variables from `main.c` are residing in this section:
+Our declared variables from [main.c](./src/main.c) are residing in this section:
 ```c
 2000002c l     O .bss	00000004 static_declared_int
 20000030 g     O .bss	00000008 declared_double
@@ -164,7 +193,7 @@ _estack = 0x20000000 + 128 * 1024 # dec
 
 Stack is a LIFO structure that starts at `_estack` and grows downwards. Min stack size is defined in the linker file as `_Min_Stack_Size`. Stack memory is freed automatically.
 
-```
+```c
 ----- 0x20020000 -----
 |                    |
 |     Stack          |
@@ -182,6 +211,58 @@ Stack is a LIFO structure that starts at `_estack` and grows downwards. Min stac
 ----- 0x20000048 -----
 ```
 
-Heap in turns starts from `_end` and grows upwards up to `_estack - _Min_Stack_Size`. Heap memory is managed by `malloc` and `free` C functions. See the default implementation for `sbrk`, which is called by `malloc` in [sysmem.c](./src/sysmem.c).
+Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Size`. Heap memory is managed by `malloc` and `free` C functions. See the default implementation for `sbrk`, which is called by `malloc` in [sysmem.c](./src/sysmem.c).
 
 ## Boot Process
+
+Linker file specifies the first instuction to run in the programm:
+```c
+// linker file
+ENTRY(Reset_Handler)
+```
+
+Actually it saves a reference to the `Reset_Handler` function address to the .elf file:
+
+```sh
+arm-none-eabi-objdump -t -f stm32-memory.elf | grep "start address"
+
+start address 0x08000525
+```
+
+Looking at our symbol table, `Reset_Handler` is present in the FLASH `.text` section as all other functions:
+```c
+08000524 g     F .text	00000064 Reset_Handler
+```
+
+TODO explain address diff?
+
+### NVIC
+
+TODO
+
+### Bootloader 
+
+This `Reset_Handler` is a bootloader function that could be used for many applications from security-specific to auto updating the firmware. Here we'll explore the basic default implementation to understand how it interacts with the MCUs memory.
+
+By default `Reset_Handler` method is declared in the [startup_stm32f436xx.s](./src/startup_stm32f436xx.s) ASM file provided by STM23CubeMX. The ASM version is included here for reference only. Actual [bootloader.c](./src/bootloader.c) implementation in this project is written in C for clarity.
+
+Note that variables defined in the linker script could be accessed in C code:
+```c
+extern uint32_t _edata;
+```
+
+So that it's easily possible to replicate the ASM version.
+
+Minimal loading process could be split into the following steps:
+
+1. Setup the microcontroller system, initialize the FPU setting, vector table location and External memory configuration (`SystemInit()` function)
+2. Copy the `.data` segment initializers from FLASH to RAM
+3. Zero fill the `.bss` segment
+4. Call static constructors (`__libc_init_array()` function)
+5. Call the application's entry point (`main()` function)
+
+For steps #1 and #4 STM32CubeMX provides function implementations, you could check details in [system_stm32f4xx.c](./src/system_stm32f4xx.c).
+
+## C stdlib
+
+TODO
