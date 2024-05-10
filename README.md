@@ -161,7 +161,7 @@ $1 = 0
 $2 = (double *) 0x20000030 <declared_double>
 ```
 
-Once you define the variable, means you assign some value to it, it's address doesn't change obviously:
+Once you define the variable, means you assign some value to it, it's address doesn't change:
 
 ```sh
 (gdb) p declared_double
@@ -277,8 +277,12 @@ Rows in the table are addresses of the MCU hard-defined functions for various ev
 
 Let's connect to our programm with gdb, here's what we see as the first output:
 ```sh
+...
+Reading symbols from ./stm32-memory-explained.elf...
+Remote debugging using localhost:61234
 Reset_Handler () at %PATH%/bootloader.c:25
 25	void Reset_Handler() {
+(gdb)
 ```
 
 This `Reset_Handler` is a bootloader function that could be used for many applications from security-specific to auto updating the firmware. Here we'll explore the basic default implementation to understand how it interacts with the MCUs memory.
