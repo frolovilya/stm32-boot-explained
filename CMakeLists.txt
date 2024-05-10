@@ -24,9 +24,14 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Variables
 if(NOT PROGRAMMER_CLI)
-    set(PROGRAMMER_CLI /Applications/STMicroelectronics/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI)
+    set(PROGRAMMER_CLI /opt/ST/STM32CubeCLT_1.15.1/STM32CubeProgrammer/bin)
 endif()
 message("Programmer CLI: " ${PROGRAMMER_CLI})
+
+if(NOT GDB_SERVER)
+    set(GDB_SERVER /opt/ST/STM32CubeCLT_1.15.1/STLink-gdb-server/bin)
+endif()
+message("GDB Server: " ${GDB_SERVER})
 
 # MCU specific compiler flags
 set(TARGET_FLAGS "-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard ")
@@ -60,7 +65,6 @@ add_executable(${CMAKE_PROJECT_NAME}
     ./src/syscalls.c
     ./src/sysmem.c
     ./src/system_stm32f4xx.c
-    #./src/startup_stm32f446xx.s
 )
 
 add_subdirectory(drivers)
@@ -70,5 +74,10 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Upload ELF to the device
 add_custom_target(flash
-    COMMAND ${PROGRAMMER_CLI}
+    COMMAND ${PROGRAMMER_CLI}/STM32_Programmer_CLI
      -c port=swd -w $<TARGET_FILE:${CMAKE_PROJECT_NAME}> -v -rst)
+
+# Start ST-Link gdb server
+add_custom_target(gdb-server
+    COMMAND ${GDB_SERVER}/ST-LINK_gdbserver
+     -d -cp ${PROGRAMMER_CLI})

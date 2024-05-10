@@ -1,79 +1,17 @@
-# stm32-memory
+# stm32-memory-explained
 
-STM32 memory and bootloader process explained.
+A detailed explanation of the STM32 memory mapping and bootloader process.
 
-
-Even though all examples below are for STM32F4, basic principles apply to pretty much all MCUs.
-
-## Prerequisite
-
-### Build
-Install [ARM GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads), on Mac could be done with _brew_:
-```sh
-brew install --cask gcc-arm-embedded
-```
-
-Install [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html) to flash STM32 via ST-Link.
-
-There's also an all-in-one [STM32CubeCLT](https://www.st.com/en/development-tools/stm32cubeclt.html?rt=um&id=UM3088) command tools package available.
-
-Build the project using CMake:
-
-```sh
-mkdir build; cd build
-
-cmake ../ -DPROGRAMMER_CLI=/Applications/STMicroelectronics/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLISTM32_Programmer_CLI
-
-make VERBOSE=1
-```
-
-Note that the last command is a linking stage. If we strip all other compiler flags, the command could look like below. Basically we istruct the linker to link all .obj files into .elf binary by using provided linker script.
-
-```sh
-arm-none-eabi-gcc  
-    ...
-    -T "%SCRIPT_DIR%/STM32F446RETx_FLASH.ld"  
-    "%OBJ_DIR%/main.c.obj" 
-    "%OBJ_DIR%/bootloader.c.obj" 
-    "%OBJ_DIR%/syscalls.c.obj" 
-    "%OBJ_DIR%/sysmem.c.obj" 
-    "%OBJ_DIR%/system_stm32f4xx.c.obj" 
-    -o stm32-memory.elf
-```
-
-### Upload
-
-STM32CuberProgrammer is preconfigured for SWD procotol, just run:
-```sh
-make flash
-```
-
-Take a note on the programmer output. It's using `0x08000000` address as a starting point:
-
-```sh
-...
-Memory Programming ...
-Opening and parsing file: stm32-memory.elf
-  File          : stm32-memory.elf
-  Size          : 1,46 KB
-  Address       : 0x08000000
-...
-```
-
-It's actually a FLASH memory starting address that will be explained below.
-
-### Debug 
-
-TODO
+Even though all examples below are for STM32F446, basic principles apply to pretty much all MCUs.
 
 ## Linker File
+
+STM32CubeMX produces [STM32F446RETx_FLASH.ld](./src/STM32F446RETx_FLASH.ld) which we'll be looking at as a reference for all our explorations.
 
 The linker takes the object files produced by the compiler and makes a final compilation output, .elf binary in our case.
 The linker is always using a linker script file. Even if you don't specify any, a default one is used. 
 
-STM32CubeMX produces [STM32F446RETx_FLASH.ld](./src/STM32F446RETx_FLASH.ld) which we'll be looking at as a reference for all out explorations below.
-
-Important to note, that the linker script only describes the memory based on the MCU specifications and doesn't alter any memory adresses.
+Important to note, that the linker script only describes the memory based on the MCU specifications and doesn't alter any hardware memory adressing.
 
 ## Memory
 
@@ -126,7 +64,7 @@ MEMORY
 }
 ```
 
-Note that it's just a default implementation, you could easily split FLASH and RAM and add your blocks or sections.
+Note that it's just a default implementation, you could easily split FLASH and RAM and add your blocks or sections as soon as they follow the MCU memory specification.
 
 
 ## Sections
@@ -149,7 +87,7 @@ SECTIONS
 
 To explore .elf symbol table we'll be using `arm-none-eabi-objdump` command and sort all entries by their addresses:
 ```sh
-arm-none-eabi-objdump -t stm32-memory.elf | sort
+arm-none-eabi-objdump -t stm32-memory-explained.elf | sort
 ```
 
 The program produces output as described in details [here](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
@@ -215,6 +153,23 @@ Our declared variables from [main.c](./src/main.c) are residing in this section:
 20000040 g     O .bss	00000004 declared_my_union
 ```
 
+Let's check with gdb:
+```sh
+(gdb) p declared_double
+$1 = 0
+(gdb) p &declared_double
+$2 = (double *) 0x20000030 <declared_double>
+```
+
+Once you define the variable, means you assign some value to it, it's address doesn't change obviously:
+
+```sh
+(gdb) p declared_double
+$3 = 86
+(gdb) p &declared_double
+$4 = (double *) 0x20000030 <declared_double>
+```
+
 ### ._user_heap_stack
 
 All **RAM** memory above `_end` and until `_estack` is dedicated to heap and stack memory.
@@ -256,7 +211,9 @@ Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Si
 
 ## Boot Process
 
-Linker file specifies the first instuction to run in the program:
+### Linker Entry Point
+
+You may have noticed, that there's an `ENTRY` instruction on the linker file:
 ```c
 // linker file
 ENTRY(Reset_Handler)
@@ -265,7 +222,7 @@ ENTRY(Reset_Handler)
 Actually it saves a reference to the `Reset_Handler` function address to the .elf file:
 
 ```sh
-arm-none-eabi-objdump -t -f stm32-memory.elf | grep "start address"
+arm-none-eabi-objdump -t -f stm32-memory-explained.elf | grep "start address"
 
 start address 0x08000525
 ```
@@ -277,7 +234,7 @@ Looking at our symbol table, `Reset_Handler` is present in the FLASH `.text` sec
 
 TODO explain address diff?
 
-Actually this information is used mostly by the linker to check if the entry point symbol really exist somewhere in the code. It has no practical meaning for the MCU.
+Though this information is used mostly by the linker to check if the entry point symbol really exist somewhere in the code. It has no practical meaning for the MCU.
 
 ### Alias Memory
 
@@ -302,10 +259,10 @@ But `Reset_Handler` has an address `0x08000524` which is not exactly the beginni
 
 Here's where Vector Table comes into play.
 ```c
-08000000 l    d  .isr_vector	00000000 .isr_vector
+08000000 g     O .isr_vector	000001c4 Vector_Table
 ```
 
-Rows in the table are addresses of the MCU hard-defined functions for various events and interrupts. Actual table must be filled by a bootloader.
+Rows in the table are addresses of the MCU hard-defined functions for various events and interrupts. Consult the spec to see all events and interrupts supported. Actual table must be filled by the bootloader.
 
 | Address    | Name                   |
 |------------|------------------------|
@@ -318,13 +275,19 @@ Rows in the table are addresses of the MCU hard-defined functions for various ev
 
 ### Bootloader 
 
+Let's connect to our programm with gdb, here's what we see as the first output:
+```sh
+Reset_Handler () at %PATH%/bootloader.c:25
+25	void Reset_Handler() {
+```
+
 This `Reset_Handler` is a bootloader function that could be used for many applications from security-specific to auto updating the firmware. Here we'll explore the basic default implementation to understand how it interacts with the MCUs memory.
 
-By default `Reset_Handler` method is declared in the [startup_stm32f436xx.s](./src/startup_stm32f436xx.s) ASM file provided by STM23CubeMX. The ASM version is included here for reference only. Actual [bootloader.c](./src/bootloader.c) implementation in this project is written in C for clarity.
+By default `Reset_Handler` method is declared in the _startup_stm32f436xx.s_ ASM file provided by STM23CubeMX. Actual [bootloader.c](./src/bootloader.c) implementation in this project is written in C for clarity.
 
 Note that variables defined in the linker script could be accessed in C code:
 ```c
-extern uint32_t _edata;
+extern uint32_t _estack;
 ```
 
 So that it's easily possible to replicate the ASM version.
@@ -342,3 +305,68 @@ For steps #1 and #4 STM32CubeMX provides function implementations, you could che
 ## C stdlib
 
 TODO
+
+## Try It Yourself
+
+The project has a minimal set of files required to boot up STM32 and explore the memory.
+
+### Build
+[ARM GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) is required to build the project.
+
+It's recommended to install an all-in-one [STM32CubeCLT](https://www.st.com/en/development-tools/stm32cubeclt.html?rt=um&id=UM3088) command tools package with gcc, programmer and gdb-server tools included.
+
+Build the project using CMake:
+
+```sh
+mkdir build; cd build
+
+cmake ../ -DPROGRAMMER_CLI=/opt/ST/STM32CubeCLT_1.15.1/STM32CubeProgrammer/bin \
+    -DGDB_SERVER=/opt/ST/STM32CubeCLT_1.15.1/STLink-gdb-server/bin
+
+make VERBOSE=1
+```
+
+Note that the last command is a linking stage. If we strip all other compiler flags, the command could look like below. Here's where the linker is instructed to use our linker script.
+
+```sh
+arm-none-eabi-gcc  
+    ...
+    -T "%SCRIPT_DIR%/STM32F446RETx_FLASH.ld"  
+    ...
+    "%OBJ_DIR%/%OBJECT_NAME%.c.obj" 
+    ...
+    -o stm32-memory-explained.elf
+```
+
+### Upload
+
+STM32CuberProgrammer is preconfigured for SWD procotol, just run:
+```sh
+make flash
+```
+
+Take a note on the programmer output. It's using `0x08000000` address as a starting point:
+
+```sh
+...
+Memory Programming ...
+Opening and parsing file: stm32-memory-explained.elf
+  File          : stm32-memory-explained.elf
+  Size          : 1,46 KB
+  Address       : 0x08000000
+...
+```
+
+It's actually the FLASH memory starting address that we already know.
+
+### Debug 
+
+There's a custom target pre-configured to run ST-Link GDB Server:
+
+```sh
+# start ST-Link gdb server
+make gdb-server
+
+# connect with gdb debugger
+gdb -ex 'target remote localhost:61234' ./stm32-memory-explained.elf
+```
