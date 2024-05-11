@@ -280,7 +280,7 @@ Though this information is mostly used by the linker to verify the existence of 
 
 ### Alias Memory
 
-According to the STM32 specification, the CPU fetches the top-of-stack value from address `0x00000000`, then begins code execution from the boot memory starting at `0x00000004`.
+According to the STM32 specification, the CPU fetches the top-of-stack `_estack` value from address `0x00000000`, then begins code execution from the boot memory starting at `0x00000004`.
 
 ```c
 +---- 0x001FFFFF ----+
