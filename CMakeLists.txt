@@ -51,7 +51,7 @@ set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -Wl,--start-group -lc -lm -Wl,--en
 set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -Wl,--print-memory-usage")
 
 # Set the project name
-set(CMAKE_PROJECT_NAME stm32-memory)
+set(CMAKE_PROJECT_NAME stm32-boot-explained)
 
 # Core project settings
 project(${CMAKE_PROJECT_NAME})
