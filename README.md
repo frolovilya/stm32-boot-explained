@@ -1,6 +1,6 @@
-# stm32-memory-explained
+# stm32-boot-explained
 
-A detailed explanation of the STM32 memory mapping and bootloader process.
+A detailed explanation of the STM32 memory mapping and bootload process.
 
 Even though all examples below are for STM32F446, basic principles apply to pretty much all MCUs.
 
@@ -14,6 +14,8 @@ The linker is always using a linker script file. Even if you don't specify any, 
 Important to note, that the linker script only describes the memory based on the MCU specifications and doesn't alter any hardware memory adressing.
 
 ## Memory
+
+We can't talk about bootloader process without understanding the memory structure. Actually it's the purpose of the bootloader to have the memory in a state ready to execute our application's `main()` method.
 
 Program memory, data memory, registers and I/O ports in STM32F4 are organized within the same linear address space.
 
@@ -69,7 +71,7 @@ Note that it's just a default implementation, you could easily split FLASH and R
 
 ## Sections
 
-Memory is then split in the linker file to sections, each having it's address and destination (FLASH or RAM).
+Memory is then split in the linker file to sections, each having it's address and destination (for instance FLASH or RAM).
 
 ```c
 // linker file
@@ -85,9 +87,9 @@ SECTIONS
 ```
 
 
-To explore .elf symbol table we'll be using _arm-none-eabi-objdump_ command and sort all entries by their addresses:
+To explore _.elf_ symbol table we'll be using _arm-none-eabi-objdump_ command and _sort_ all entries by their addresses:
 ```sh
-arm-none-eabi-objdump -t stm32-memory-explained.elf | sort
+arm-none-eabi-objdump -t stm32-boot-explained.elf | sort
 ```
 
 The program produces output as described in details [here](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
@@ -190,24 +192,40 @@ _estack = 0x20000000 + 128 * 1024 # dec
 Stack is a LIFO structure that starts at `_estack` and grows downwards. Min stack size is defined in the linker file as `_Min_Stack_Size`. Stack memory is freed automatically.
 
 ```c
------ 0x20020000 -----
+----- 0x20020000 ----- <-- _estack
 |                    |
 |     Stack          |
 |                    |
------ 0x200xxxxx -----
+| - - 0x2001FC00 - - | <-- -_Min_Stack_Size
+|                    |
+----- 0x200sssss ----- <-- $msp register
 |                    |
 |                    |
 |     Free space     |
 |                    |
 |                    |
------ 0x200yyyyy -----
+----- 0x200hhhhh ----- <-- Actual heap end
 |                    |
 |     Heap           |
 |                    |
------ 0x20000048 -----
+| - - 0x20000248 - - | <-- +_Min_Heap_Size
+|                    |
+----- 0x20000048 ----- <-- _end
 ```
 
-Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Size`.
+Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Size` when requested by `malloc`.
+
+We have a `local_defined_int` variable defined in [main.c](./src/main.c). Let's check the address with _gdb_ after it's been initialized:
+
+```sh
+(gdb) p &local_defined_int
+$1 = (unsigned short *) 0x2001ffd6
+
+(gdb) p $msp
+$2 = (void *) 0x2001ffd0
+```
+
+Which matches with our expectations, when the variable is above the `$msp`.
 
 
 ## C stdlib
@@ -218,10 +236,10 @@ It's also the case for `sbrk` call that increases program data space. `malloc` i
 
 ## Boot Process
 
-Let's connect to our programm with _gdb_, here's what we see as the first output:
+Now when we understand the MCUs memory, ;et's connect to our programm with _gdb_, here's what we see as the first output:
 ```sh
 ...
-Reading symbols from ./stm32-memory-explained.elf...
+Reading symbols from ./stm32-boot-explained.elf...
 Remote debugging using localhost:61234
 Reset_Handler () at %PATH%/bootloader.c:25
 25	void Reset_Handler() {
@@ -244,7 +262,7 @@ ENTRY(Reset_Handler)
 Actually it saves a reference to the `Reset_Handler` function address to the _.elf_ file header:
 
 ```sh
-arm-none-eabi-objdump -t -f stm32-memory-explained.elf | grep "start address"
+arm-none-eabi-objdump -t -f stm32-boot-explained.elf | grep "start address"
 
 start address 0x080006e9
 ```
@@ -347,7 +365,7 @@ arm-none-eabi-gcc
     ...
     "%OBJ_DIR%/%OBJECT_NAME%.c.obj" 
     ...
-    -o stm32-memory-explained.elf
+    -o stm32-boot-explained.elf
 ```
 
 ### Upload
@@ -362,8 +380,8 @@ Take a note on the programmer output. It's using `0x08000000` address as a start
 ```sh
 ...
 Memory Programming ...
-Opening and parsing file: stm32-memory-explained.elf
-  File          : stm32-memory-explained.elf
+Opening and parsing file: stm32-boot-explained.elf
+  File          : stm32-boot-explained.elf
   Size          : 1,46 KB
   Address       : 0x08000000
 ...
@@ -380,5 +398,5 @@ There's a custom target pre-configured to run _ST-LINK_gdbserver_:
 make gdb-server
 
 # connect with gdb debugger
-gdb -ex 'target remote localhost:61234' ./stm32-memory-explained.elf
+gdb -ex 'target remote localhost:61234' ./stm32-boot-explained.elf
 ```

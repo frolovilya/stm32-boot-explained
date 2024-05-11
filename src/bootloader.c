@@ -2,6 +2,10 @@
 #include "system_stm32f4xx.h"
 #include "stm32f4xx.h"
 
+/**
+ * Simple Bootloader implementation
+*/
+
 // start address for the initialization values of the .data section. defined in
 // linker script
 extern uint32_t _sidata;
