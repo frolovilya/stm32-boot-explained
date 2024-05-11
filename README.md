@@ -329,7 +329,7 @@ extern uint32_t _estack;
 
 So that it's easily possible to replicate the ASM version.
 
-The minimal loading process could be split into the following steps:
+The **minimal loading process** then could be split into the following steps:
 
 1. Setup the microcontroller system, initialize the FPU setting, vector table location and External memory configuration (`SystemInit()` function)
 2. Copy the `.data` segment initializers from FLASH to RAM
