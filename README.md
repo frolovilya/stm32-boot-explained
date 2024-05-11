@@ -290,7 +290,7 @@ According to the STM32 specification, the CPU fetches the top-of-stack `_estack`
 +---- 0x00000000 ----+
 ```
 
-This is exactly where the Alias memory mentioned above is defined. With the default configuration, when `BOOT0 = 0`, it aliases to the FLASH memory block starting at `0x8000000`.
+This is exactly where the Alias memory mentioned above is defined. With the default configuration, when pin value `BOOT0 = 0`, it aliases to the FLASH memory block starting at `0x8000000`.
 
 Other options based on the `BOOT0` and `BOOT1` include System memory with an embedded bootloader or RAM memory.
 The embedded bootloader is programmed by ST during production and out of scope of this manual.
