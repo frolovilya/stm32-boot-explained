@@ -1,17 +1,17 @@
 # stm32-boot-explained
 
-A detailed explanation of the STM32 memory mapping and bootload process.
+A detailed explanation of the STM32 memory mapping and bootloading process.
 
-Even though all examples below are for STM32F446, basic principles apply to pretty much all MCUs.
+While all the examples below are for STM32F446, the basic principles apply to most MCUs.
 
 ## Linker File
 
 STM32CubeMX produces [STM32F446RETx_FLASH.ld](./src/STM32F446RETx_FLASH.ld) which we'll be looking at as a reference for all our explorations.
 
-The linker takes the object files produced by the compiler and makes a final compilation output, _.elf_ binary in our case.
-The linker is always using a linker script file. Even if you don't specify any, a default one is used. 
+The linker takes the object files produced by the compiler and generates the final compilation output, which in our case is the _.elf_ binary.
+The linker always uses a linker script file; even if you don't specify one, a default script is used.
 
-Important to note, that the linker script only describes the memory based on the MCU specifications and doesn't alter any hardware memory adressing.
+Important to note, that the linker script only describes the memory based on the MCU specifications and does not alter any hardware memory adressing.
 
 ## Memory
 
@@ -50,10 +50,10 @@ Where Alias memory is pointing to Flash, System or RAM memory depending on the `
 
 Two spaces are of the most interest for us for now:
 
-* **RAM** stores data produced by the running programm. Using heap or stack abstractions for memory management. The data isn't persisted.
-* **FLASH** keeps the program binary and constants, used by bootloader to initialize RAM on startup. The data is persisted.
+* **RAM** stores data produced by the running programm, utilizing heap or stack abstractions for memory management. The data isn't persisted.
+* **FLASH** keeps the program binary, constants and initial variables values, used by bootloader to initialize RAM on startup. The data is persisted.
 
-Though the functional division could be any in practice. You may want to load a program binary data into RAM instead and vice versa.
+However, in practice, the functional division could vary. For instance, you may need to load program binary data into RAM or vice versa.
 
 Memory structure is reflected in the linker file. FLASH starts at `ORIGIN = 0x8000000` and RAM at `ORIGIN = 0x20000000`.
 
@@ -66,12 +66,12 @@ MEMORY
 }
 ```
 
-Note that it's just a default implementation, you could easily split FLASH and RAM and add your blocks or sections as soon as they follow the MCU memory specification.
+Note that this is just a default implementation, you could easily split FLASH and RAM and add your own blocks or sections as soon as they adhere to the MCU memory specification.
 
 
 ## Sections
 
-Memory is then split in the linker file to sections, each having it's address and destination (for instance FLASH or RAM).
+Memory is then split in the linker file into sections, each having its address and destination (for instance, FLASH or RAM).
 
 ```c
 // linker file
@@ -92,7 +92,7 @@ To explore _.elf_ symbol table we'll be using _arm-none-eabi-objdump_ command an
 arm-none-eabi-objdump -t stm32-boot-explained.elf | sort
 ```
 
-The program produces output as described in details [here](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
+The program produces output as described in details [in the manual](https://manpages.debian.org/unstable/binutils-arm-none-eabi/arm-none-eabi-objdump.1.en.html):
 ```c
 Address Flag_Bits Section Size Name
 ```
@@ -100,14 +100,14 @@ Address Flag_Bits Section Size Name
 ### .text 
 Compiled programm code goes into this section in **FLASH** memory.
 
-The section starts from the flash's `ORIGIN` address. And `_etext` points to the last address of the section.
+The section starts from the flash's `ORIGIN` address, and `_etext` points to the last address of the section.
 
 ```c
 08000000 l    d  .text	00000000 .text
 08000c00 g       .text	00000000 _etext
 ```
 
-We could see the location of the functions, that we use in our bootloader file:
+We can see the location of the functions, that we use in our bootloader file:
 
 ```c
 080005c8 g     F .text	00000048 __libc_init_array
@@ -118,7 +118,7 @@ We could see the location of the functions, that we use in our bootloader file:
 
 ### .data
 
-The section resides in **RAM** memory and keeps all _defined_ variables values. Address range spans from `_sdata` to `_edata`.
+The section resides in **RAM** memory and holds all _defined_ variables values. The address range spans from `_sdata` to `_edata`.
 
 
 ```c
@@ -126,7 +126,8 @@ The section resides in **RAM** memory and keeps all _defined_ variables values. 
 20000010 g       .data	00000000 _edata
 ```
 
-Our defined variables from [main.c](./src/main.c) are residing in this section:
+The defined variables from [main.c](./src/main.c) reside in this section:
+
 ```c
 20000000 l     O .data	00000004 static_defined_int
 20000008 g     O .data	00000008 defined_double
@@ -147,7 +148,7 @@ Memory range spans from `_sbss` to `_ebss`.
 20000044 g       .bss	00000000 _ebss
 ```
 
-Our declared variables from [main.c](./src/main.c) are residing in this section:
+The declared variables from [main.c](./src/main.c) reside in this section:
 ```c
 2000002c l     O .bss	00000004 static_declared_int
 20000030 g     O .bss	00000008 declared_double
@@ -163,7 +164,7 @@ $1 = 0
 $2 = (double *) 0x20000030 <declared_double>
 ```
 
-Once you define the variable, means you assign some value to it, it's address doesn't change:
+Once you define the variable, means you assign some value to it, its address doesn't change:
 
 ```sh
 (gdb) p declared_double
@@ -189,7 +190,7 @@ _estack = 0x20000000 + 128 * 1024 # dec
         = 0x20020000
 ```
 
-Stack is a LIFO structure that starts at `_estack` and grows downwards. Min stack size is defined in the linker file as `_Min_Stack_Size`. Stack memory is freed automatically.
+Stack is a LIFO structure that starts at `_estack` and grows downwards. The minimum stack size is defined in the linker file as `_Min_Stack_Size`. Stack memory is  automatically freed.
 
 ```c
 ----- 0x20020000 ----- <-- _estack
@@ -230,13 +231,14 @@ Which matches with our expectations, when the variable is above the `$msp`.
 
 ## C stdlib
 
-One thing to mention about C stdlib implementation. The one that's a standard for embedded C applications is a [Newlib](https://sourceware.org/newlib/). The library expects you to implement some system specific functions. STM32CubeMX generates [syscalls.c](./src/syscalls.c) file with required default implementations.
+It's worth mentioning that the standard C library implementation commonly used in embedded C applications is [Newlib](https://sourceware.org/newlib/).
+This library requires the implementation of certain system-specific functions. STM32CubeMX generates the [syscalls.c](./src/syscalls.c) file with the necessary default implementations.
 
 It's also the case for `sbrk` call that increases program data space. `malloc` is using this function to allocate more heap memory. You may find an implementation generated by STM32CubeMX in [sysmem.c](./src/sysmem.c). It simply allows the heap to grow from `_end` up to `_estack - _Min_Stack_Size`.
 
 ## Boot Process
 
-Now when we understand the MCUs memory, ;et's connect to our programm with _gdb_, here's what we see as the first output:
+Now when we understand the MCUs memory, let's connect to our programm with _gdb_, here's what we see as the first output:
 ```sh
 ...
 Reading symbols from ./stm32-boot-explained.elf...
