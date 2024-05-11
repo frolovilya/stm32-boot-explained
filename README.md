@@ -255,13 +255,13 @@ pc             0x80006e8           0x80006e8 <Reset_Handler>
 
 ### Linker Entry Point
 
-You may have noticed, that there's an `ENTRY` instruction on the linker file:
+You may have noticed that there's an `ENTRY` instruction in the linker file:
 ```c
 // linker file
 ENTRY(Reset_Handler)
 ```
 
-Actually it saves a reference to the `Reset_Handler` function address to the _.elf_ file header:
+Actually, it saves a reference to the `Reset_Handler` function address in the _.elf_ file header:
 
 ```sh
 arm-none-eabi-objdump -t -f stm32-boot-explained.elf | grep "start address"
@@ -269,18 +269,18 @@ arm-none-eabi-objdump -t -f stm32-boot-explained.elf | grep "start address"
 start address 0x080006e9
 ```
 
-Looking at our symbol table, `Reset_Handler` is present in the FLASH `.text` section as all other functions:
+Looking at our symbol table, `Reset_Handler` is present in the FLASH `.text` section, just like all other functions:
 ```c
 080006e8 g     F .text	00000064 Reset_Handler
 ```
 
-Addresses are page aligned, that's why there's a possibility for _.elf_ header and actual address mismatch.
+Addresses are page aligned, which is why there's a possibility for a mismatch between the _.elf_ header and the actual address.
 
-Though this information is used mostly by the linker to check if the entry point symbol really exist somewhere in the code. It has no practical meaning for the MCU.
+Though this information is mostly used by the linker to verify the existence of the entry point symbol within the code, it has no practical meaning for the MCU.
 
 ### Alias Memory
 
-Based on the STM32 specification, the CPU fetches the top-of-stack value from address `0x00000000`, then starts code execution from the boot memory starting from `0x00000004`.
+According to the STM32 specification, the CPU fetches the top-of-stack value from address `0x00000000`, then begins code execution from the boot memory starting at `0x00000004`.
 
 ```c
 ----- 0x001FFFFF -----
@@ -290,21 +290,22 @@ Based on the STM32 specification, the CPU fetches the top-of-stack value from ad
 ----- 0x00000000 -----
 ```
 
-It's exactly where Alias memory mentioned above is defined. With the default configuration, when `BOOT0 = 0`, it's aliasing to the FLASH memory block starting from `0x8000000`.
+This is exactly where the Alias memory mentioned above is defined. With the default configuration, when `BOOT0 = 0`, it aliases to the FLASH memory block starting at `0x8000000`.
 
 Other options based on the `BOOT0` and `BOOT1` include System memory with an embedded bootloader or RAM memory.
-The embedded bootloader is programmed by ST during production and out of scope for now.
+The embedded bootloader is programmed by ST during production and out of scope of this manual.
 
 But `Reset_Handler` has an address `0x08000524` which is not exactly the beginning of the FLASH memory, how does the MCU find the bootstrap method then?
 
 ### Vector Table
 
-Here's where Vector Table comes into play.
+Here's where Vector Table comes into play. 
+
 ```c
 08000000 g     O .isr_vector	000001c4 Vector_Table
 ```
 
-Rows in the table are addresses of the MCU hard-defined functions for various events and interrupts. Consult the spec to see all events and interrupts supported. Actual table must be filled by the bootloader.
+The Vector Table, located at the beginning of memory, contains pointers to various interrupt service routines and essential startup functions, including the Reset_Handler. Consult the spec to see all events and interrupts supported. Actual table must be filled by the bootloader.
 
 | Address    | Name                   |
 |------------|------------------------|
@@ -317,18 +318,18 @@ Rows in the table are addresses of the MCU hard-defined functions for various ev
 
 ### Bootloader 
 
-This `Reset_Handler` is a bootloader function that could be used for many applications from security-specific to auto updating the firmware. Here we'll explore the basic default implementation to understand how it interacts with the MCUs memory.
+This `Reset_Handler` is a bootloader function that can be used for many applications, from security-specific tasks to firmware auto-updating. Here, we'll explore the basic default implementation to understand its interaction with the MCU's memory.
 
 By default `Reset_Handler` method is declared in the _startup_stm32f436xx.s_ ASM file provided by STM23CubeMX. Actual [bootloader.c](./src/bootloader.c) implementation in this project is written in C for clarity.
 
-Note that variables defined in the linker script could be accessed in C code:
+Note that variables defined in the linker script can be accessed in C code:
 ```c
 extern uint32_t _estack;
 ```
 
 So that it's easily possible to replicate the ASM version.
 
-Minimal loading process could be split into the following steps:
+The minimal loading process could be split into the following steps:
 
 1. Setup the microcontroller system, initialize the FPU setting, vector table location and External memory configuration (`SystemInit()` function)
 2. Copy the `.data` segment initializers from FLASH to RAM
@@ -336,11 +337,11 @@ Minimal loading process could be split into the following steps:
 4. Call static constructors (`__libc_init_array()` function)
 5. Call the application's entry point (`main()` function)
 
-For steps #1 and #4 STM32CubeMX provides function implementations, you could check details in [system_stm32f4xx.c](./src/system_stm32f4xx.c).
+For steps #1 and #4, STM32CubeMX provides function implementations, you can check details in [system_stm32f4xx.c](./src/system_stm32f4xx.c).
 
 ## Try It Yourself
 
-The project has a minimal set of files required to boot up the STM32. You may want to try it yourself to check _arm-none-eabi-objdump_ and step through _gdb_.
+The project has a minimal set of files required to boot up the STM32. You may want to try it yourself to check the output of _arm-none-eabi-objdump_ and step through with _gdb_.
 
 ### Build
 [ARM GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) is required to build the project.
@@ -358,7 +359,7 @@ cmake ../ -DPROGRAMMER_CLI=/opt/ST/STM32CubeCLT_1.15.1/STM32CubeProgrammer/bin \
 make VERBOSE=1
 ```
 
-Note that the last command is a linking stage. If we strip all other compiler flags, the command could look like below. Here's where the linker is instructed to use our linker script.
+Note that the last command is the linking stage. If we strip all other compiler flags, the command could look like the following. This is where the linker is instructed to use our linker script.
 
 ```sh
 arm-none-eabi-gcc  
@@ -377,7 +378,7 @@ _STM32_Programmer_CLI_ is preconfigured for SWD procotol, just run:
 make flash
 ```
 
-Take a note on the programmer output. It's using `0x08000000` address as a starting point:
+Take a note on the programmer output, which is using `0x08000000` address as a starting point:
 
 ```sh
 ...
@@ -389,7 +390,7 @@ Opening and parsing file: stm32-boot-explained.elf
 ...
 ```
 
-It's actually the FLASH memory starting address that we already know.
+It's actually the starting address of the FLASH memory, which we already know.
 
 ### Debug 
 
