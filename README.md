@@ -305,7 +305,7 @@ Here's where Vector Table comes into play.
 08000000 g     O .isr_vector	000001c4 Vector_Table
 ```
 
-MCU treats the beginning of memory as a Vector Table, that contains pointers to various interrupt service routines and essential startup functions, including the Reset_Handler. Consult the spec to see exact table structure that MCU expects to load from `0x00000000`. Actual table must be filled by the bootloader.
+MCU treats the beginning of memory as a Vector Table, that contains pointers to various interrupt service routines and essential startup functions, including the `Reset_Handler`. Consult the spec to see exact table structure that MCU expects to load from `0x00000000`. Actual table must be filled by the bootloader.
 
 | Address    | Name                   |
 |------------|------------------------|
