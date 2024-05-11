@@ -21,29 +21,29 @@ Program memory, data memory, registers and I/O ports in STM32F4 are organized wi
 
 ```c
          ...
------ 0x2001FFFF -----
++---- 0x2001FFFF ----+
 |                    |
 |   RAM              |
 |                    |
------ 0x20000000 -----
-         ...          
------ 0x1FFF7A0F -----
++---- 0x20000000 ----+
+|        ...         |
++---- 0x1FFF7A0F ----+
 |                    |
 |   System           |
 |                    |
------ 0x1FFF0000 -----
-         ...
------ 0x081FFFFF -----
++---- 0x1FFF0000 ----+
+|        ...         |
++---- 0x081FFFFF ----+
 |                    |
 |   Flash            |
 |                    |
------ 0x08000000 -----
-         ...
------ 0x001FFFFF -----
++---- 0x08000000 ----+
+|        ...         |
++---- 0x001FFFFF ----+
 |                    |
 |   Alias            |
 |                    |
------ 0x00000000 -----
++---- 0x00000000 ----+
 ```
 
 Where Alias memory is pointing to Flash, System or RAM memory depending on the `BOOT0` pin. By default it's FLASH.
@@ -193,25 +193,25 @@ _estack = 0x20000000 + 128 * 1024 # dec
 Stack is a LIFO structure that starts at `_estack` and grows downwards. The minimum stack size is defined in the linker file as `_Min_Stack_Size`. Stack memory is  automatically freed.
 
 ```c
------ 0x20020000 ----- <-- _estack
++---- 0x20020000 ----+ <-- _estack
 |                    |
 |     Stack          |
 |                    |
-| - - 0x2001FC00 - - | <-- -_Min_Stack_Size
++ - - 0x2001FC00 - - + <-- -_Min_Stack_Size
 |                    |
------ 0x200sssss ----- <-- $msp register
++---- 0x200sssss ----+ <-- $msp register
 |                    |
 |                    |
 |     Free space     |
 |                    |
 |                    |
------ 0x200hhhhh ----- <-- Actual heap end
++---- 0x200hhhhh ----+ <-- Actual heap end
 |                    |
 |     Heap           |
 |                    |
-| - - 0x20000248 - - | <-- +_Min_Heap_Size
++ - - 0x20000248 - - + <-- +_Min_Heap_Size
 |                    |
------ 0x20000048 ----- <-- _end
++---- 0x20000048 ----+ <-- _end
 ```
 
 Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Size` when requested by `malloc`.
@@ -283,11 +283,11 @@ Though this information is mostly used by the linker to verify the existence of 
 According to the STM32 specification, the CPU fetches the top-of-stack value from address `0x00000000`, then begins code execution from the boot memory starting at `0x00000004`.
 
 ```c
------ 0x001FFFFF -----
++---- 0x001FFFFF ----+
 |                    |
 |   Alias            |
 |                    |
------ 0x00000000 -----
++---- 0x00000000 ----+
 ```
 
 This is exactly where the Alias memory mentioned above is defined. With the default configuration, when `BOOT0 = 0`, it aliases to the FLASH memory block starting at `0x8000000`.
