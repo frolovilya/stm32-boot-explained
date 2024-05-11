@@ -118,7 +118,7 @@ We can see the location of the functions, that we use in our bootloader file:
 
 ### .data
 
-The section resides in **RAM** memory and holds all _defined_ variables values. The address range spans from `_sdata` to `_edata`.
+The section resides in **RAM** memory and holds all variables with defined values. The address range spans from `_sdata` to `_edata`.
 
 
 ```c
@@ -126,11 +126,11 @@ The section resides in **RAM** memory and holds all _defined_ variables values. 
 20000010 g       .data	00000000 _edata
 ```
 
-The defined variables from [main.c](./src/main.c) reside in this section:
+Let's check what variables from [main.c](./src/main.c) reside in this section:
 
 ```c
-20000000 l     O .data	00000004 static_defined_int
-20000008 g     O .data	00000008 defined_double
+20000000 l     O .data	00000004 static_data_int
+20000008 g     O .data	00000008 data_double
 ```
 
 Actual values must be filled by a bootloader script by copying data from **FLASH** memory at address `_sidata`:
@@ -140,7 +140,7 @@ Actual values must be filled by a bootloader script by copying data from **FLASH
 
 ### .bss
 
-Block Starting Symbol **RAM** data section for all _declared_ variables. That means that they have no value yet and the bootloader takes care of setting this block's data to `0`.
+Block Starting Symbol **RAM** data section for all variables without assigned value. The bootloader takes care of setting this block's data to `0`.
 
 Memory range spans from `_sbss` to `_ebss`.
 ```c
@@ -148,29 +148,29 @@ Memory range spans from `_sbss` to `_ebss`.
 20000044 g       .bss	00000000 _ebss
 ```
 
-The declared variables from [main.c](./src/main.c) reside in this section:
+All variables from [main.c](./src/main.c) without explicit value reside in this section:
 ```c
-2000002c l     O .bss	00000004 static_declared_int
-20000030 g     O .bss	00000008 declared_double
-20000038 g     O .bss	00000008 declared_my_struct
-20000040 g     O .bss	00000004 declared_my_union
+2000002c l     O .bss	00000004 static_bss_int
+20000030 g     O .bss	00000008 bss_double
+20000038 g     O .bss	00000008 bss_my_struct
+20000040 g     O .bss	00000004 bss_my_union
 ```
 
 Let's check with _gdb_:
 ```sh
-(gdb) p declared_double
+(gdb) p bss_double
 $1 = 0
-(gdb) p &declared_double
-$2 = (double *) 0x20000030 <declared_double>
+(gdb) p &bss_double
+$2 = (double *) 0x20000030 <bss_double>
 ```
 
-Once you define the variable, means you assign some value to it, its address doesn't change:
+Once you assign some value to the variable, its address doesn't change and it still stays in `.bss`:
 
 ```sh
-(gdb) p declared_double
+(gdb) p bss_double
 $3 = 86
-(gdb) p &declared_double
-$4 = (double *) 0x20000030 <declared_double>
+(gdb) p &bss_double
+$4 = (double *) 0x20000030 <bss_double>
 ```
 
 ### ._user_heap_stack
@@ -216,10 +216,10 @@ Stack is a LIFO structure that starts at `_estack` and grows downwards. The mini
 
 Heap in turn starts from `_end` and grows upwards up to `_estack - _Min_Stack_Size` when requested by `malloc`.
 
-We have a `local_defined_int` variable defined in [main.c](./src/main.c). Let's check the address with _gdb_ after it's been initialized:
+We have a `stack_int` variable defined in [main.c](./src/main.c). Let's check the address with _gdb_ after it's been initialized:
 
 ```sh
-(gdb) p &local_defined_int
+(gdb) p &stack_int
 $1 = (unsigned short *) 0x2001ffd6
 
 (gdb) p $msp
@@ -320,7 +320,7 @@ The Vector Table, located at the beginning of memory, contains pointers to vario
 
 This `Reset_Handler` is a bootloader function that can be used for many applications, from security-specific tasks to firmware auto-updating. Here, we'll explore the basic default implementation to understand its interaction with the MCU's memory.
 
-By default `Reset_Handler` method is declared in the _startup_stm32f436xx.s_ ASM file provided by STM23CubeMX. Actual [bootloader.c](./src/bootloader.c) implementation in this project is written in C for clarity.
+By default `Reset_Handler` method is defined in the _startup_stm32f436xx.s_ ASM file provided by STM23CubeMX. Actual [bootloader.c](./src/bootloader.c) implementation in this project is written in C for clarity.
 
 Note that variables defined in the linker script can be accessed in C code:
 ```c
